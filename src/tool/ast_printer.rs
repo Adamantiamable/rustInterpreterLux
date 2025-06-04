@@ -27,6 +27,12 @@ impl AstPrinter {
             Expr::Unary { operator, right } => {
                 format!("({} {})", operator, self.print(right))
             }
+            Expr::Variable { name } => {
+                name.clone()
+            }
+            Expr::Assignment { name, value } => {
+                format!("({} = {})", name, self.print(value))
+            }
         }
     }
     pub fn main() {

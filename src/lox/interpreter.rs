@@ -1,24 +1,30 @@
+
 use crate::tool::generate_ast::LiteralValue;
-use crate::{lox::error_manager::ErrorManager, tool::generate_ast::Expr, lox::token::TokenType};
-use crate::lox::error_manager::Error;
+use crate::{lox::error_manager::ErrorManager, tool::generate_ast::{Expr, Stmt}, lox::token::TokenType};
+use crate::lox::error_manager::{self, Error};
+use crate::lox::environment::Environment;
+use std::rc::Rc;
+use std::cell::RefCell;
 
-use super::error_manager;
 
-
-pub struct Interpreter <'a> {
-    error_manager: &'a mut ErrorManager,
+pub struct Interpreter {
+    error_manager: Rc<RefCell<ErrorManager>>,
+    environment: Environment,
     }
 
-impl <'a> Interpreter <'a> {
-    pub fn new(error_manager: &'a mut ErrorManager) -> Self {
-        Interpreter { error_manager }
+impl Interpreter {
+    pub fn new(error_manager: Rc<RefCell<ErrorManager>>) -> Self {
+        Interpreter { 
+            error_manager: error_manager.clone(), 
+            environment: Environment::new(error_manager), // or pass the appropriate parent environment if needed
+        }
     }
 
     fn check_number_operand(&mut self, operator: &str, operand: &LiteralValue) -> Result<(), Error> {
         if let LiteralValue::Number(_) = operand {
             Ok(())
         } else {
-            Err(self.error_manager.report_runtime_error(
+            Err(self.error_manager.borrow_mut().report_runtime_error(
                 &format!("Operand must be a number for operator '{}'", operator)))
             
         }
@@ -66,16 +72,59 @@ impl <'a> Interpreter <'a> {
                         (LiteralValue::Boolean(r)) => Ok(LiteralValue::Boolean(!r)),
                         _ => Err(Error::Runtime("Right value must be a boolean".into())),
                     },
-                    _ => Err(self.error_manager.report_runtime_error(
+                    _ => Err(self.error_manager.borrow_mut().report_runtime_error(
                         &format!("Invalid operator '{}' for unary expression", operator))),
             }
             },
             Expr::Grouping { expression } => {
                 self.evaluate(expression)
             },
-            _ => Err(self.error_manager.report_runtime_error(
+            Expr::Variable { name } => {
+                if let Some(value) = self.environment.get(name) {
+                    Ok(value.clone())
+                } else {
+                    Err(self.error_manager.borrow_mut().report_runtime_error(
+                        &format!("Undefined variable '{}'.", name)))
+                }
+            },
+            Expr::Assignment { name, value }
+            => {
+                println!("Assigning value to variable: {}", name);
+                let value = self.evaluate(value)?;
+                self.environment.define(name.clone(), value.clone());
+                Ok(value)
+            },
+            _ => Err(self.error_manager.borrow_mut().report_runtime_error(
                 &format!("Unexpected expression type: {:?}", expression)))
         }
     }
+    pub fn execute_var_declaration(&mut self, name: &str, initializer: Option<&Expr>) -> Result<(), Error> {
+        let value = if let Some(expr) = initializer {
+            self.evaluate(expr)?
+        } else {
+            LiteralValue::Nil // Default value if no initializer is provided
+        };
+        self.environment.define(name.to_string(), value);
+        Ok(())
+    }
     
+    pub fn interpret(&mut self, statements_list: Vec<Stmt>) -> Result<LiteralValue, Error> {
+        for statement in statements_list {
+            match statement {
+                Stmt::Expression(expr) => {
+                    self.evaluate(&expr)?;
+                },
+                Stmt::Print(expr) => {
+                    let value = self.evaluate(&expr)?;
+                    println!("{:?}", value);
+                },
+                Stmt::Var { name, initializer } => {
+                    self.execute_var_declaration(&name, initializer.as_ref())?;
+                },
+                _ => return Err(self.error_manager.borrow_mut().report_runtime_error(
+                    &format!("Unsupported statement type: {:?}", statement))),
+            }
+        }
+        Ok(LiteralValue::Nil) // Return nil if no value is produced
+    }
 }

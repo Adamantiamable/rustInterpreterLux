@@ -3,6 +3,8 @@ use crate::lox::token_type::TokenType;
 use crate::lox::error_manager::ErrorManager;
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 
 static KEYWORDS: Lazy<HashMap<&'static str, TokenType>> = Lazy::new(|| {
@@ -26,19 +28,19 @@ static KEYWORDS: Lazy<HashMap<&'static str, TokenType>> = Lazy::new(|| {
     m
 });
 
-pub struct Scanner <'a>
+pub struct Scanner
 {
     source: String,
     tokens: Vec<Token>,
     start: usize,
     current: usize,
     line: usize,
-    error_manager: &'a mut ErrorManager,
+    error_manager: Rc<RefCell<ErrorManager>>, 
 }
 
 
-impl<'a> Scanner<'a> {
-    pub fn new(source: String, error_manager: &'a mut ErrorManager) -> Self {
+impl Scanner {
+    pub fn new(source: String, error_manager: Rc<RefCell<ErrorManager>>) -> Self {
         Scanner {
             source,
             tokens: Vec::new(),
@@ -130,7 +132,7 @@ impl<'a> Scanner<'a> {
         }
         
         if self.is_at_end() {
-            self.error_manager.report(self.line, "Unterminated string.", None);
+            self.error_manager.borrow_mut().report(self.line, "Unterminated string.", None);
             return;
         }
         else {
@@ -219,7 +221,7 @@ impl<'a> Scanner<'a> {
                 self.identifier();
                 }
                 else {
-                self.error_manager.report(self.line, &format!("Unexpected character: '{}'", c), None);
+                self.error_manager.borrow_mut().report(self.line, &format!("Unexpected character: '{}'", c), None);
                 }
             }
         }

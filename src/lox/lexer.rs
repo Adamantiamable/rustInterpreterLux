@@ -5,14 +5,16 @@ use crate::lox::error_manager::ErrorManager;
 use crate::lox::scanner;
 use crate::lox::parser::Parser;
 use crate::lox::interpreter::Interpreter;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 pub struct Lexer {
-    error_reporter: ErrorManager,
+    error_reporter: Rc<RefCell<ErrorManager>>,
 }
 
 impl Lexer {
     pub fn new() -> Self {
-        Self { error_reporter: ErrorManager::new() }
+        Self { error_reporter: Rc::new(RefCell::new(ErrorManager::new())) }
     }
 
     pub fn main(&mut self) {
@@ -61,30 +63,25 @@ impl Lexer {
     }
 
     fn run(&mut self, source: String) {
-        self.error_reporter.had_error = false; // Reset error state
+        self.error_reporter.borrow_mut().had_error = false; // Reset error state
         // Here you would typically parse and interpret the source code.
         // For now, we just print it to demonstrate that it was read.
         println!("Running Lox code:\n{}", source.clone());
-        let mut scanner = scanner::Scanner::new(source.clone(), &mut self.error_reporter);
+        let mut error_reporter = self.error_reporter.clone();
+        let mut scanner = scanner::Scanner::new(source.clone(), error_reporter.clone());
         let mut tokens = scanner.scan_tokens();
-        let mut parser = crate::lox::parser::Parser::new(tokens, &mut self.error_reporter);
-        let expr = match parser.parse() {
-            Ok(expr) => expr,
-            Err(_) => {
-                eprintln!("Error during parsing. Exiting.");
-                return;
-            }
-        };
-        if self.error_reporter.had_error {
-            eprintln!("Error during parsing. Exiting.");
-            return;
-        }
-        println!("Parsed expression: {:?}", &expr);
-        let mut interpreter = Interpreter::new(&mut self.error_reporter);
-        match interpreter.evaluate(&expr) {
-            Ok(result) => println!("Result: {:?}", result),
-            Err(e) => eprintln!("Runtime error: {:?}", e),
-        }
+        let mut parser = crate::lox::parser::Parser::new(tokens, error_reporter.clone());
+        println!("Starting parsing");
+        let mut statements = parser.parse();
+        println!("Finished parsing");
+        let mut interpreter = Interpreter::new(error_reporter.clone());
+        interpreter.interpret(statements);
+        if error_reporter.borrow_mut().had_error {
+            eprintln!("Errors encountered during parsing or interpretation.");
+            std::process::exit(65); // Exit with error code
+        } else {
+            println!("Lox code executed successfully.");
+        }       
     }
 
 }
