@@ -25,7 +25,11 @@ static KEYWORDS: Lazy<HashMap<&'static str, TokenType>> = Lazy::new(|| {
     m.insert("true", TokenType::True);
     m.insert("var", TokenType::Var);
     m.insert("while", TokenType::While);
+    m.insert("&", TokenType::And);
+    m.insert("||", TokenType::Or);
     m
+
+
 });
 
 pub struct Scanner
@@ -211,6 +215,20 @@ impl Scanner {
             },
             '\n' => {
                 self.line += 1;
+            },
+            '&' => {
+                if self.match_char('&') {
+                    self.add_token(TokenType::And, None);
+                } else {
+                    self.error_manager.borrow_mut().report(self.line, "Unexpected character '&'.", None);
+                }
+            },
+            '|' => {
+                if self.match_char('|') {
+                    self.add_token(TokenType::Or, None);
+                } else {
+                    self.error_manager.borrow_mut().report(self.line, "Unexpected character '|'.", None);
+                }
             },
             '"' => {self.string()},
             _ => {

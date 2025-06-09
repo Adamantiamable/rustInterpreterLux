@@ -1,4 +1,3 @@
-
 use crate::tool::generate_ast::{Ast, Expr, LiteralValue, Stmt};
 use crate::lox::token::{Token, TokenType};
 use crate::lox::error_manager::{self, ErrorManager};
@@ -128,6 +127,8 @@ impl Parser {
         if self.match_token_type(TokenType::Identifier) {
         //    println!("Identifier has been well identified: {}", self.previous().lexeme);
             return Expr::Variable { name: self.previous().lexeme.clone() };
+        
+        
         }
 
         panic!("Unexpected token: {}", self.peek_token().lexeme);
@@ -227,9 +228,8 @@ impl Parser {
                 value: Box::new(value),
             };
         }
-        else {
-            return self.equality();
-        }
+        // if not in an assignment, check for logical OR
+        self.logical_or()
     }
 
     fn print_statement(&mut self) -> Stmt {
@@ -251,28 +251,58 @@ impl Parser {
         self.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
         let condition = self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after if condition.");
-        let then_branch = Box::new(self.statement());
+        self.consume(TokenType::LeftBrace, "Expect '{' before then body.");
+
+        // Collect all statements in the then branch
+        let mut then_statements = Vec::new();
+        while !self.check_token_type(TokenType::RightBrace) && !self.is_at_end() {
+            then_statements.push(self.statement());
+        }
+        self.consume(TokenType::RightBrace, "Expect '}' after then body.");
+
+        // Create a sequence statement for then branch
+        let then_branch = Box::new(Stmt::Sequence(then_statements));
+
+        // Handle else branch similarly if it exists
         let else_branch = if self.match_token_type(TokenType::Else) {
-            Some(Box::new(self.statement()))
+            self.consume(TokenType::LeftBrace, "Expect '{' before else body.");
+            let mut else_statements = Vec::new();
+            while !self.check_token_type(TokenType::RightBrace) && !self.is_at_end() {
+                else_statements.push(self.statement());
+            }
+            self.consume(TokenType::RightBrace, "Expect '}' after else body.");
+            Some(Box::new(Stmt::Sequence(else_statements)))
         } else {
             None
         };
-        return Stmt::If {
+
+        Stmt::If {
             condition,
             then_branch,
             else_branch,
-        };
+        }
     }
     fn while_statement(&mut self) -> Stmt {
         self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
         let condition = self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after while condition.");
-        let body = Box::new(self.statement());
+        self.consume(TokenType::LeftBrace, "Expect '{' before while body.");
+        // Collect all statements in the while body
+        let mut statements = Vec::new();
+        while !self.check_token_type(TokenType::RightBrace) && !self.is_at_end() {
+            statements.push(self.statement());
+        }
+        self.consume(TokenType::RightBrace, "Expect '}' after while body.");
+
+        let body = Box::new(Stmt::Sequence(statements));
+
         return Stmt::While {
             condition,
             body,
-        };
+        }; 
     }
+
+
     fn for_statement(&mut self) -> Stmt {
         self.consume(TokenType::LeftParen, "Expect '(' after 'for'.");
         // Initializer 
@@ -383,6 +413,36 @@ impl Parser {
         return self.statement();
         //To add : catch parse errors in which case synchronize
         }
+
+    fn logical_and(&mut self) -> Expr {
+        // println!("Logical AND {:?}, {}", self.peek_token().token_type, self.peek_token().lexeme);
+        let mut expr = self.equality();
+        while self.match_token_type(TokenType::And) {
+            let operator = self.previous().lexeme.clone();
+            let right = self.equality();
+            expr = Expr::Logical {
+                left: Box::new(expr),
+                operator,
+                right: Box::new(right),
+            };
+        }
+        return expr;
+    }
+
+    fn logical_or(&mut self) -> Expr {
+        // println!("Logical OR {:?}, {}", self.peek_token().token_type, self.peek_token().lexeme);
+        let mut expr = self.logical_and();
+        while self.match_token_type(TokenType::Or) {
+            let operator = self.previous().lexeme.clone();
+            let right = self.logical_and();
+            expr = Expr::Logical {
+                left: Box::new(expr),
+                operator,
+                right: Box::new(right),
+            };
+        }
+        return expr;
+    }
 
     pub fn parse(&mut self) -> Vec<Stmt> {
         let mut statements = Vec::new();

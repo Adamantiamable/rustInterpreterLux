@@ -1,5 +1,3 @@
-
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum LiteralValue {
     Number(f64),
@@ -8,7 +6,7 @@ pub enum LiteralValue {
     Nil,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr{
     Binary{ // 1+2
         left: Box<Expr>,
@@ -32,8 +30,13 @@ pub enum Expr{
         name: String,
         value: Box<Expr>,
     },
+    Logical {
+        left: Box<Expr>,
+        operator: String,
+        right: Box<Expr>,
+    },
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Expression(Expr),
     Print(Expr),
@@ -69,6 +72,7 @@ pub enum Stmt {
     Continue,
     Empty,
     Error(String), // For error handling
+    Sequence(Vec<Stmt>),
 }
 
 pub struct Ast {

@@ -1,4 +1,3 @@
-
 use crate::tool::generate_ast::LiteralValue;
 use crate::{lox::error_manager::ErrorManager, tool::generate_ast::{Expr, Stmt}, lox::token::TokenType};
 use crate::lox::error_manager::{self, Error};
@@ -119,6 +118,40 @@ impl Interpreter {
                 self.environment.define(name.clone(), value.clone());
                 Ok(value)
             },
+            Expr::Logical { left, operator, right } => {
+                let left_value = self.evaluate(left)?;
+                
+                match operator.as_str() {
+                    "&&" => {
+                        // Only evaluate right side if left is true (short-circuit)
+                        if let LiteralValue::Boolean(false) = left_value {
+                            Ok(LiteralValue::Boolean(false))
+                        } else {
+                            let right_value = self.evaluate(right)?;
+                            match right_value {
+                                LiteralValue::Boolean(r) => Ok(LiteralValue::Boolean(r)),
+                                _ => Err(self.error_manager.borrow_mut().report_runtime_error(
+                                    "Right operand must be a boolean"))
+                            }
+                        }
+                    },
+                    "||" => {
+                        // Only evaluate right side if left is false (short-circuit)
+                        if let LiteralValue::Boolean(true) = left_value {
+                            Ok(LiteralValue::Boolean(true))
+                        } else {
+                            let right_value = self.evaluate(right)?;
+                            match right_value {
+                                LiteralValue::Boolean(r) => Ok(LiteralValue::Boolean(r)),
+                                _ => Err(self.error_manager.borrow_mut().report_runtime_error(
+                                    "Right operand must be a boolean"))
+                            }
+                        }
+                    },
+                    _ => Err(self.error_manager.borrow_mut().report_runtime_error(
+                        &format!("Unknown logical operator '{}'", operator)))
+                }
+            },
             _ => Err(self.error_manager.borrow_mut().report_runtime_error(
                 &format!("Unexpected expression type: {:?}", expression)))
         }
@@ -134,32 +167,53 @@ impl Interpreter {
     }
 
 
-    fn interpret_single_statement(&mut self, statement:Stmt) -> Result<LiteralValue, Error> {
-            match statement {
-                Stmt::Expression(expr) => {
-                    self.evaluate(&expr)?;
-                },
-                Stmt::Print(expr) => {
-                    let value = self.evaluate(&expr)?;
-                    println!("{:?}", value);
-                },
-                Stmt::If {condition, then_branch, else_branch} => {
-                    println!("Evaluating if statement with condition: {:?}", condition);
-                    let condition_value = self.evaluate(&condition)?;
-                    if let LiteralValue::Boolean(true) = condition_value {
-                        self.interpret_single_statement(*then_branch)?;
-                    } else if let Some(else_branch) = else_branch {
-                        self.interpret_single_statement(*else_branch)?;
+    fn interpret_single_statement(&mut self, statement: Stmt) -> Result<LiteralValue, Error> {
+        match statement {
+            Stmt::Expression(expr) => {
+                self.evaluate(&expr)?;
+            },
+            Stmt::Print(expr) => {
+                let value = self.evaluate(&expr)?;
+                println!("{:?}", value);
+            },
+            Stmt::If {condition, then_branch, else_branch} => {
+                println!("Evaluating if statement with condition: {:?}", condition);
+                let condition_value = self.evaluate(&condition)?;
+                if let LiteralValue::Boolean(true) = condition_value {
+                    self.interpret_single_statement(*then_branch)?;
+                } else if let Some(else_branch) = else_branch {
+                    self.interpret_single_statement(*else_branch)?;
+                }
+            },
+            Stmt::Var { name, initializer } => {
+                self.execute_var_declaration(&name, initializer.as_ref())?;
+            },
+            Stmt::Block(statements) => {
+                self.execute_bock(statements)?;
+            },
+            Stmt::While {condition,body} => {
+                let condition_value = match self.evaluate(&condition) {
+                    Ok(value) => {
+                        println!("Evaluation successful: {:?}", value);
+                        value
+                    },
+                    Err(e) => {
+                        println!("Evaluation failed with error: {:?}", e);
+                        return Err(e);
                     }
-                },
-                Stmt::Var { name, initializer } => {
-                    self.execute_var_declaration(&name, initializer.as_ref())?;
-                },
-                Stmt::Block(statements) => {
-                    self.execute_bock(statements)?;
-                },
-                _ => return Err(self.error_manager.borrow_mut().report_runtime_error(
-                    &format!("Unsupported statement type: {:?}", statement))),
+                };
+                //println!("Condition value: {:?}", condition_value);
+                if let LiteralValue::Boolean(true) = condition_value {
+                    self.interpret_single_statement(*body)?;
+                }
+            },
+            Stmt::Sequence(statements) => {
+                for stmt in statements {
+                    self.interpret_single_statement(stmt)?;
+                }
+            },
+            _ => return Err(self.error_manager.borrow_mut().report_runtime_error(
+                &format!("Unsupported statement type: {:?}", statement))),
         }
         Ok(LiteralValue::Nil) // Return nil if no value is produced
     }
@@ -167,11 +221,12 @@ impl Interpreter {
     fn execute_bock(&mut self, statements_list: Vec<Stmt>) -> Result<(), Error> {
         // Save the current environment
         let previous_env = Rc::new(RefCell::new(self.environment.clone()));
+
     
         // Create a new environment enclosed by the previous one
         self.environment = Environment::new(self.error_manager.clone());
         self.environment.enclosing = Some(previous_env.clone());
-    
+
         for statement in statements_list {
             //println!("Currently working on statement: {:?}", statement);
             if let Err(e) = self.interpret_single_statement(statement) {
@@ -227,6 +282,38 @@ impl Interpreter {
                 },
                 Stmt::Block(statements) => {
                     self.execute_bock(statements)?;
+                },
+                Stmt::While { condition, body }
+                => {
+                let condition_value = match self.evaluate(&condition) {
+                    Ok(value) => {
+                        println!("Evaluation successful: {:?}", value);
+                        value
+                    },
+                    Err(e) => {
+                        println!("Evaluation failed with error: {:?}", e);
+                        return Err(e);
+                    }
+                };
+                //println!("Condition value: {:?}", condition_value);
+                while let LiteralValue::Boolean(true) = condition_value {
+                    self.interpret_single_statement((*body).clone())?;
+                    // Re-evaluate the condition for the next iteration
+                    let condition_value = match self.evaluate(&condition) {
+                        Ok(value) => {
+                            //println!("Re-evaluation successful: {:?}", value);
+                            value
+                        },
+                        Err(e) => {
+                            println!("Re-evaluation failed with error: {:?}", e);
+                            return Err(e);
+                        }
+                    };
+                    //println!("Condition value after re-evaluation: {:?}", condition_value);
+                    if let LiteralValue::Boolean(false) = condition_value {
+                        break; // Exit the loop if the condition is false
+                    }
+                }
                 },
                 _ => return Err(self.error_manager.borrow_mut().report_runtime_error(
                     &format!("Unsupported statement type: {:?}", statement))),

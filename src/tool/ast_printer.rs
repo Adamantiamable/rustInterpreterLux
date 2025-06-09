@@ -33,6 +33,9 @@ impl AstPrinter {
             Expr::Assignment { name, value } => {
                 format!("({} = {})", name, self.print(value))
             }
+            Expr::Logical { left, operator, right } => {
+                format!("({} {} {})", operator, self.print(left), self.print(right))
+            }
         }
     }
     pub fn main() {
