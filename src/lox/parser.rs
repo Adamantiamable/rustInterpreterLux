@@ -99,7 +99,7 @@ impl Parser {
 
 
     fn primary(&mut self) -> Expr {
-        println!("Primary {:?}, {}", self.peek_token().token_type, self.peek_token().lexeme);
+        // println!("Primary {:?}, {}", self.peek_token().token_type, self.peek_token().lexeme);
         if self.match_token_type(TokenType::True) {
             return Expr::Literal { value: LiteralValue::Boolean(true) };
         }
@@ -110,23 +110,23 @@ impl Parser {
             return Expr::Literal { value: LiteralValue::Nil };
         }
         if self.match_token_type(TokenType::NumberLiteral) {
-            println!("Number literal: {}", self.previous().literal.as_ref().unwrap());
+        //    println!("Number literal: {}", self.previous().literal.as_ref().unwrap());
             let value = self.previous().literal.as_ref().unwrap().parse::<f64>().unwrap();
             return Expr::Literal { value: LiteralValue::Number(value) };
         }
         if self.match_token_type(TokenType::StringLiteral) {
-            println!("String literal: {}", self.previous().literal.as_ref().unwrap());
+        //    println!("String literal: {}", self.previous().literal.as_ref().unwrap());
             let value = self.previous().literal.as_ref().unwrap().clone();
             return Expr::Literal { value: LiteralValue::String(value) };
         }
         if self.match_token_type(TokenType::LeftParen) {
-            println!("Left parenthesis found: {:?}", self.previous().lexeme);
+        //    println!("Left parenthesis found: {:?}", self.previous().lexeme);
             let expr = self.expression();
             self.consume(TokenType::RightParen, "Expect ')' after expression.");
             return Expr::Grouping { expression: Box::new(expr) };
         }
         if self.match_token_type(TokenType::Identifier) {
-            println!("Identifier has been well identified: {}", self.previous().lexeme);
+        //    println!("Identifier has been well identified: {}", self.previous().lexeme);
             return Expr::Variable { name: self.previous().lexeme.clone() };
         }
 
@@ -164,7 +164,7 @@ impl Parser {
     }
 
     fn term(&mut self) -> Expr {
-        println!("Term {:?}, {}", self.peek_token().token_type, self.peek_token().lexeme);
+        //println!("Term {:?}, {}", self.peek_token().token_type, self.peek_token().lexeme);
         let mut expr = self.factor();
 
         while self.match_token_type(TokenType::Plus) || self.match_token_type(TokenType::Minus) {
@@ -180,7 +180,7 @@ impl Parser {
     }
 
     fn comparison(&mut self) -> Expr {
-         println!("Comparison {:?}, {}", self.peek_token().token_type, self.peek_token().lexeme);
+        // println!("Comparison {:?}, {}", self.peek_token().token_type, self.peek_token().lexeme);
         let mut expr = self.term();
         // println!("finished calling term, current token: {:?}", self.peek_token());
         while self.match_token_type(TokenType::Greater) || self.match_token_type(TokenType::GreaterEqual) ||
@@ -200,7 +200,7 @@ impl Parser {
 
 
     fn equality(&mut self) -> Expr{
-        println!("Equality {:?}, {}", self.peek_token().token_type, self.peek_token().lexeme);
+        //println!("Equality {:?}, {}", self.peek_token().token_type, self.peek_token().lexeme);
         let mut expr = self.comparison();
         while self.match_token_type(TokenType::EqualEqual) || self.match_token_type(TokenType::BangEqual) {
             let operator_lexeme = self.previous().lexeme.clone();
@@ -217,7 +217,7 @@ impl Parser {
     fn expression(&mut self) -> Expr {
         // IF ASSIGNMENT
         if self.peek_token().token_type == TokenType::Identifier && self.tokens.get(self.current + 1).map_or(false, |t| t.token_type == TokenType::Equal) {
-            println!("we are inside assignment");
+            //println!("we are inside assignment");
             self.advance_token(); // Move past the identifier token
             let name = self.previous().lexeme.clone();
             self.consume(TokenType::Equal, "Expect '=' after variable name.");
@@ -362,9 +362,9 @@ impl Parser {
     }
 
     fn var_declaration(&mut self) -> Stmt {
-        println!("We are inside var_declaration");
+        //println!("We are inside var_declaration");
         let name = self.peek_token().lexeme.clone(); // Assuming the variable name is the previous token
-        println!("Variable name: {}", name);
+        // println!("Variable name: {}", name);
         self.advance_token(); // Move past the variable name token
         let initializer = if self.match_token_type(TokenType::Equal) {
             Some(self.expression())
@@ -376,7 +376,7 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Stmt {
-        println!("Declaration {:?}, {}", self.peek_token().token_type, self.peek_token().lexeme);
+        // println!("Declaration {:?}, {}", self.peek_token().token_type, self.peek_token().lexeme);
         if self.match_token_type(TokenType::Var) {
             return self.var_declaration()
         }

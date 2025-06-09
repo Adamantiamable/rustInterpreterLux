@@ -66,14 +66,14 @@ impl Lexer {
         self.error_reporter.borrow_mut().had_error = false; // Reset error state
         // Here you would typically parse and interpret the source code.
         // For now, we just print it to demonstrate that it was read.
-        println!("Running Lox code:\n{}", source.clone());
+        //println!("Running Lox code:\n{}", source.clone());
         let mut error_reporter = self.error_reporter.clone();
         let mut scanner = scanner::Scanner::new(source.clone(), error_reporter.clone());
         let mut tokens = scanner.scan_tokens();
         let mut parser = crate::lox::parser::Parser::new(tokens, error_reporter.clone());
-        println!("Starting parsing");
+        //println!("Starting parsing");
         let mut statements = parser.parse();
-        println!("Finished parsing");
+        //println!("Finished parsing");
         let mut interpreter = Interpreter::new(error_reporter.clone());
         interpreter.interpret(statements);
         if error_reporter.borrow_mut().had_error {

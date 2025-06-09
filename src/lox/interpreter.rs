@@ -58,6 +58,31 @@ impl Interpreter {
                         _ => Err(Error::Runtime("Operands must be numbers".into())),
                     },
                     "==" => Ok(LiteralValue::Boolean(&left_value == &right_value)),
+                    "!=" => Ok(LiteralValue::Boolean(&left_value != &right_value)),
+                    ">" => match (&left_value, &right_value) {
+                        (LiteralValue::Number(l), LiteralValue::Number(r)) => Ok(LiteralValue::Boolean(l > r)),
+                        _ => Err(Error::Runtime("Operands must be numbers".into())),
+                    },
+                    "<" => match (&left_value, &right_value) {
+                        (LiteralValue::Number(l), LiteralValue::Number(r)) => Ok(LiteralValue::Boolean(l < r)),
+                        _ => Err(Error::Runtime("Operands must be numbers".into())),
+                    },
+                    ">=" => match (&left_value, &right_value) {
+                        (LiteralValue::Number(l), LiteralValue::Number(r)) => Ok(LiteralValue::Boolean(l >= r)),
+                        _ => Err(Error::Runtime("Operands must be numbers".into())),
+                    },
+                    "<=" => match (&left_value, &right_value) {
+                        (LiteralValue::Number(l), LiteralValue::Number(r)) => Ok(LiteralValue::Boolean(l <= r)),
+                        _ => Err(Error::Runtime("Operands must be numbers".into())),
+                    },
+                    "&&" => match (&left_value, &right_value) {
+                        (LiteralValue::Boolean(l), LiteralValue::Boolean(r)) => Ok(LiteralValue::Boolean(*l && *r)),
+                        _ => Err(Error::Runtime("Operands must be booleans".into())),
+                    },
+                    "||" => match (&left_value, &right_value) {
+                        (LiteralValue::Boolean(l), LiteralValue::Boolean(r)) => Ok(LiteralValue::Boolean(*l || *r)),
+                        _ => Err(Error::Runtime("Operands must be booleans".into())),
+                    },
                     _ => Err(Error::Runtime("Invalid operator for binary expression".into())),
                 }
             },
@@ -89,7 +114,7 @@ impl Interpreter {
             },
             Expr::Assignment { name, value }
             => {
-                println!("Assigning value to variable: {}", name);
+                //println!("Assigning value to variable: {}", name);
                 let value = self.evaluate(value)?;
                 self.environment.define(name.clone(), value.clone());
                 Ok(value)
@@ -107,9 +132,9 @@ impl Interpreter {
         self.environment.define(name.to_string(), value);
         Ok(())
     }
-    
-    pub fn interpret(&mut self, statements_list: Vec<Stmt>) -> Result<LiteralValue, Error> {
-        for statement in statements_list {
+
+
+    fn interpret_single_statement(&mut self, statement:Stmt) -> Result<LiteralValue, Error> {
             match statement {
                 Stmt::Expression(expr) => {
                     self.evaluate(&expr)?;
@@ -118,8 +143,90 @@ impl Interpreter {
                     let value = self.evaluate(&expr)?;
                     println!("{:?}", value);
                 },
+                Stmt::If {condition, then_branch, else_branch} => {
+                    println!("Evaluating if statement with condition: {:?}", condition);
+                    let condition_value = self.evaluate(&condition)?;
+                    if let LiteralValue::Boolean(true) = condition_value {
+                        self.interpret_single_statement(*then_branch)?;
+                    } else if let Some(else_branch) = else_branch {
+                        self.interpret_single_statement(*else_branch)?;
+                    }
+                },
                 Stmt::Var { name, initializer } => {
                     self.execute_var_declaration(&name, initializer.as_ref())?;
+                },
+                Stmt::Block(statements) => {
+                    self.execute_bock(statements)?;
+                },
+                _ => return Err(self.error_manager.borrow_mut().report_runtime_error(
+                    &format!("Unsupported statement type: {:?}", statement))),
+        }
+        Ok(LiteralValue::Nil) // Return nil if no value is produced
+    }
+
+    fn execute_bock(&mut self, statements_list: Vec<Stmt>) -> Result<(), Error> {
+        // Save the current environment
+        let previous_env = Rc::new(RefCell::new(self.environment.clone()));
+    
+        // Create a new environment enclosed by the previous one
+        self.environment = Environment::new(self.error_manager.clone());
+        self.environment.enclosing = Some(previous_env.clone());
+    
+        for statement in statements_list {
+            //println!("Currently working on statement: {:?}", statement);
+            if let Err(e) = self.interpret_single_statement(statement) {
+                // Optional: print debug info
+                println!("Runtime error: {:?}", e);
+    
+                // Restore the previous environment
+                let previous = self.environment.enclosing.as_ref().unwrap().borrow().clone();
+                self.environment = previous;
+    
+                // Return the error
+                return Err(e);
+            }
+        }
+    
+        // Restore previous environment after block
+        self.environment = previous_env.as_ref().borrow().clone();
+        Ok(())
+    }
+    
+    
+    pub fn interpret(&mut self, statements_list: Vec<Stmt>) -> Result<LiteralValue, Error> {
+        for statement in statements_list {
+            match statement {
+                Stmt::Expression(expr) => {
+                    self.evaluate(&expr)?;
+                },
+                Stmt::If {condition, then_branch, else_branch} => {
+                    //println!("Evaluating if statement with condition WITHIN INTERPRET FUNCTION: {:?}", condition);
+                    let condition_value = match self.evaluate(&condition) {
+                        Ok(value) => {
+                            println!("Evaluation successful: {:?}", value);
+                            value
+                        },
+                        Err(e) => {
+                            println!("Evaluation failed with error: {:?}", e);
+                            return Err(e);
+                        }
+                    };
+                    //println!("Condition value: {:?}", condition_value);
+                    if let LiteralValue::Boolean(true) = condition_value {
+                        self.interpret_single_statement(*then_branch)?;
+                    } else if let Some(else_branch) = else_branch {
+                        self.interpret_single_statement(*else_branch)?;
+                    }
+                },
+                Stmt::Print(expr) => {
+                    let value = self.evaluate(&expr)?;
+                    println!("{:?}", value);
+                },
+                Stmt::Var { name, initializer } => {
+                    self.execute_var_declaration(&name, initializer.as_ref())?;
+                },
+                Stmt::Block(statements) => {
+                    self.execute_bock(statements)?;
                 },
                 _ => return Err(self.error_manager.borrow_mut().report_runtime_error(
                     &format!("Unsupported statement type: {:?}", statement))),

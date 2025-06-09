@@ -5,9 +5,11 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use crate::lox::token::Token;
 
+#[derive(Debug, Clone)]
 pub struct Environment {
     values: std::collections::HashMap<String, LiteralValue>,
     error_manager: Rc<RefCell<ErrorManager>>,
+    pub enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
 impl Environment {
@@ -15,6 +17,7 @@ impl Environment {
         Environment {
             values: std::collections::HashMap::new(),
             error_manager,
+            enclosing: None,
         }
         
     }
@@ -23,15 +26,17 @@ impl Environment {
         self.values.insert(name, value);
     }
 
-    pub fn get(&mut self, name: &str) -> Option<&LiteralValue> {
-        if !self.values.contains_key(name) {
-            self.error_manager.borrow_mut().report_runtime_error(
-                &format!("Undefined variable '{}'.", name)
-            );
-            return None;
-        }
-        self.values.get(name)
+    pub fn get(&mut self, name: &str) -> Option<LiteralValue> {
+        if self.values.contains_key(name) {
+            return self.values.get(name).cloned();
+        } else if let Some(enclosing) = &self.enclosing {
+            return enclosing.borrow_mut().get(name);
+        }  
+        self.error_manager.borrow_mut().report_runtime_error(
+        &format!("Undefined variable '{}'.", name));
+        None
     }
+
 
     
 }
